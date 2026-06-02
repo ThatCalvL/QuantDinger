@@ -29,6 +29,7 @@ backend_api_python/.env
 # ========================
 .idea/
 .vscode/
+.cursor/mcp.json
 agent-tools/
 *.swp
 *.swo
