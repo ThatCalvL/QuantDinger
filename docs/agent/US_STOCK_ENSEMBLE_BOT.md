@@ -204,3 +204,80 @@ Execution path for live/paper trading is the existing Alpaca USStock integration
    converged decisively. Run it later if a finer search is wanted.
 5. **Walk-forward re-tuning cadence:** quarterly re-tune on a rolling 3-year train
    window is the recommended operating procedure.
+
+---
+
+## 9. Phase 2 — QD Stock Scout (auto stock-picking rotation bot)
+
+Phase 1 produced a single-symbol ensemble. Phase 2 answers the actual product ask:
+*"a bot that automatically finds valuable stocks and trades them"*. It uses the
+platform's native **cross-sectional strategy engine**
+(`trading_config.cs_strategy_type = "cross_sectional"` in `trading_executor.py`),
+which scans a `symbol_list` universe on every rebalance, runs a scoring script,
+and opens/closes positions to hold the top `portfolio_size` names.
+
+### 9.1 Deployed artifacts
+
+| Artifact | ID | Notes |
+|----------|----|-------|
+| Indicator "QD Stock Scout Cross-Sectional Ensemble" | 13 | Cross-sectional exec contract (`symbols`/`data`/`scores`/`rankings`), **not** the df contract |
+| Strategy "QD Stock Scout - US Equity Rotation Bot" | 13 | `USStock`, spot, long-only, `bot_type=trend` (visible on the Bot page), daily rebalance, signal mode, **running** |
+
+### 9.2 How it picks "valuable" stocks
+
+Universe: 88 liquid US large caps across all sectors (mega tech, semis,
+financials, healthcare, energy, industrials, staples). Every rebalance each
+stock is scored with the Phase-1 ensemble factors applied cross-sectionally:
+
+- **Trend votes (25%)** — EMA30>EMA100, close>SMA100, MACD hist>0 + ADX>15
+- **12-1 momentum rank (40%)** — return t-126..t-21, cross-sectional percentile
+- **52w-high proximity rank (15%)**
+- **Volume-flow votes (20%)** — OBV>MA20, A/D>MA20, close>rolling VWAP20
+- **Volatility penalty** — -10 pts when own ATR% is in its top decile
+- **Liquidity gate** — 20d average dollar volume >= $50M
+
+**Quality gates:** only stocks above SMA100 with >=2/3 trend votes and positive
+momentum enter `rankings`. The bot holds the top 5 equal-weight; when fewer
+names pass the gates (broad downtrend) it automatically holds fewer positions,
+i.e. de-risks into cash.
+
+### 9.3 Validation (run inside the backend container, exact executor contract)
+
+The backtest engine does not support cross-sectional strategies, so validation
+replicated `_execute_cross_sectional_indicator` exactly (same `safe_exec`
+sandbox, same 137-bar visible window as the live USStock fetch):
+
+| Metric | Scout (top-5, monthly rotation) | SPY buy & hold |
+|--------|--------------------------------|----------------|
+| Total return 2024-10 → 2026-06 | **+61.4%** | +27.5% |
+| CAGR | **+34.7%** | +16.3% |
+| Max drawdown (monthly marks) | -5.4% | — |
+| Periods invested | 19/20 (one cash period) | always |
+
+First live scan (2026-06-11): picked **UNH, C, PM, JNJ, MRK** from 39 eligible
+names and opened 5 equal-weight long positions (~$20k each, signal mode).
+
+### 9.4 Operations
+
+- **Rebalance cadence:** daily (`rebalance_frequency=daily`, checked hourly via
+  `decide_interval=3600`). Position diffs only — unchanged picks are held.
+- **Signal vs live:** currently `execution_mode=signal` (virtual positions +
+  notifications). To place real orders: connect an Alpaca (paper) or IBKR
+  account, then switch `execution_mode` to `live` — the broker policy layer
+  enforces USStock spot, long-only.
+- **Editing the universe / portfolio size:** patch `trading_config.symbol_list`
+  / `portfolio_size` via the Agent Gateway (`update_strategy`), then restart
+  the strategy so the loop reloads its config.
+- **Window caveat:** the live USStock fetch returns ~137 daily bars; all factor
+  lookbacks fit inside that window (`MIN_BARS=110`). Do not add factors needing
+  more history without checking the fetch limit in
+  `_execute_cross_sectional_indicator` (limit=200, source returns ~137).
+
+### 9.5 Known limitations
+
+1. Validation covers ~1.6 years (mostly upmarket); the cash-gate logic engaged
+   only once. Extend the harness with a longer panel before live capital.
+2. No per-leg stop loss between rebalances — risk is managed at the daily
+   rebalance. Acceptable for a 5-name large-cap book, but gap risk exists.
+3. Same news/sentiment gap as Phase 1; a sentiment factor can slot into the
+   scoring code once exposed via MCP.

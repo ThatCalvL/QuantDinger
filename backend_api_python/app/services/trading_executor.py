@@ -5376,7 +5376,10 @@ class TradingExecutor:
                 
                 last_rebalance = result['last_rebalance_at']
                 if isinstance(last_rebalance, str):
-                    from datetime import datetime
+                    # NOTE: do not re-import datetime here; a function-local import
+                    # shadows the module-level name and makes `datetime.now()` below
+                    # raise UnboundLocalError on the non-string branch, which forced
+                    # cross-sectional strategies to rebalance on every tick.
                     last_rebalance = datetime.fromisoformat(last_rebalance.replace('Z', '+00:00'))
                 
                 now = datetime.now()
