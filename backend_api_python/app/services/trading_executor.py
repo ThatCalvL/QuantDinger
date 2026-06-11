@@ -4285,6 +4285,38 @@ class TradingExecutor:
                         )
                         return False
 
+            # 1.4 Resolve live price when the caller did not supply one.
+            # Cross-sectional / batch callers pass current_price=0.0 and rely on the
+            # executor to fetch it here; without this, spot notional sizing below
+            # divides by zero. Single-symbol loops already pass a non-zero price.
+            if not current_price or float(current_price) <= 0:
+                try:
+                    fetched_px = self._fetch_current_price(
+                        exchange,
+                        symbol,
+                        market_type=market_type,
+                        market_category=market_category,
+                        exchange_id=price_exchange_id,
+                        kline_market_type=market_type,
+                    )
+                    if fetched_px and float(fetched_px) > 0:
+                        current_price = float(fetched_px)
+                except Exception as _px_exc:
+                    logger.warning(
+                        f"Strategy {strategy_id} failed to resolve price for {symbol}: {_px_exc}"
+                    )
+
+            # Guard: never proceed with sizing/exec on a non-positive price.
+            if not current_price or float(current_price) <= 0:
+                append_strategy_log(
+                    strategy_id, "warning",
+                    f"Signal skipped: could not resolve a valid price for {symbol} ({signal_type})",
+                )
+                logger.warning(
+                    f"Strategy {strategy_id} skipping {signal_type} for {symbol}: price unavailable"
+                )
+                return False
+
             # 2. 计算下单数量
             available_capital = self._get_available_capital(
                 strategy_id,
@@ -4347,7 +4379,11 @@ class TradingExecutor:
                          amount = (usdt_notional * leverage) / current_price
                  elif explicit_script_qty is None:
                      use_code_ratios = bool(self._code_strategy_cfg(trading_config))
-                     if use_code_ratios and sig in ("open_long", "open_short", "add_long", "add_short"):
+                     # Cross-sectional signals already carry position_size as a 0–1
+                     # capital fraction (1/portfolio_size), not a percent. Use it
+                     # directly instead of running it through _to_ratio (which would
+                     # divide by 100 and under-deploy capital by ~100x).
+                     if (use_code_ratios or cs_mode) and sig in ("open_long", "open_short", "add_long", "add_short"):
                          position_ratio = float(position_size)
                      elif entry_ratio_override is not None:
                          position_ratio = float(entry_ratio_override)
