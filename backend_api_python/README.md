@@ -16,20 +16,37 @@ Flask-based backend for QuantDinger: market data, indicators, AI analysis, backt
 
 ```text
 backend_api_python/
-├─ app/
-│  ├─ __init__.py                 # Flask app factory + startup hooks
-│  ├─ config/                     # Settings (env-driven)
-│  ├─ data_sources/               # Data sources + factory
-│  ├─ routes/                     # REST endpoints
-│  ├─ services/                   # Analysis, agents, strategies, search, user_service
-│  └─ utils/                      # PostgreSQL helpers, config loader, logging, HTTP utils
-├─ migrations/
-│  └─ init.sql                    # PostgreSQL schema initialization
-├─ env.example                    # Copy to .env for local config
-├─ requirements.txt
-├─ run.py                         # Entrypoint (loads .env, applies proxy env, starts Flask)
-├─ gunicorn_config.py             # Optional production config
-└─ README.md
+|-- app/
+|   |-- __init__.py                 # Flask app factory + startup hooks
+|   |-- config/                     # Settings (env-driven)
+|   |-- data_sources/               # Data sources + factory
+|   |-- routes/                     # REST endpoints
+|   |-- services/                   # Analysis, agents, strategies, search, user_service
+|   |-- utils/                      # PostgreSQL helpers, config loader, logging, HTTP utils
+|-- migrations/
+|   |-- init.sql                    # PostgreSQL schema initialization
+|-- env.example                     # Copy to .env for local config
+|-- requirements.txt
+|-- run.py                          # Entrypoint (loads .env, applies proxy env, starts Flask)
+|-- gunicorn_config.py              # Optional production config
+|-- README.md
+```
+
+## Architecture and quality guardrails
+
+- Backend architecture guide: `docs/backend_architecture.md`
+- Canonical live-trading venue matrix: `app/services/live_trading/capabilities.py`
+- Stable live order contracts: `app/services/live_trading/contracts.py`
+- Structural regression guard:
+
+```bash
+python scripts/backend_quality_check.py
+```
+
+Exchange integrations should add offline fixtures and pass:
+
+```bash
+python scripts/exchange_smoke_test.py --offline-contracts
 ```
 
 ## Quick start (Docker - Recommended)
@@ -51,6 +68,21 @@ ADMIN_PASSWORD=your_admin_password
 # Optional
 OPENROUTER_API_KEY=your_api_key
 ```
+
+AtlasCloud is supported as an OpenAI-compatible LLM provider. See the official
+[AtlasCloud LLM API docs](https://www.atlascloud.ai/docs/models/llm) and
+[API key guide](https://www.atlascloud.ai/docs/api-keys), then set:
+
+```bash
+LLM_PROVIDER=atlascloud
+ATLASCLOUD_API_KEY=your_api_key
+ATLASCLOUD_MODEL=deepseek-v3
+ATLASCLOUD_BASE_URL=https://api.atlascloud.ai/v1
+```
+
+Release builds inject the backend app version from the Git tag (`v3.0.23` ->
+`3.0.23`). Local source runs fall back to `git describe` and then the repo-root
+`VERSION` file; local Docker builds can override with `APP_VERSION`.
 
 ### 2) Start services
 
@@ -122,6 +154,15 @@ ADMIN_PASSWORD=your_admin_password
 
 # Optional but recommended
 OPENROUTER_API_KEY=your_api_key
+```
+
+For AtlasCloud instead, use:
+
+```bash
+LLM_PROVIDER=atlascloud
+ATLASCLOUD_API_KEY=your_api_key
+ATLASCLOUD_MODEL=deepseek-v3
+ATLASCLOUD_BASE_URL=https://api.atlascloud.ai/v1
 ```
 
 ### 4) Start the API server

@@ -18,7 +18,14 @@ _MARKET_ALIASES: Dict[str, str] = {
     "fx": "Forex",
     "usstock": "USStock",
     "us_stocks": "USStock",
+    "usstocks": "USStock",
+    "us_stock": "USStock",
     "stock": "USStock",
+    "stocks": "USStock",
+    "equity": "USStock",
+    "equities": "USStock",
+    "alpaca": "USStock",
+    "ibkr": "USStock",
     "cnstock": "CNStock",
     "hkstock": "HKStock",
     "futures": "Futures",
@@ -99,7 +106,7 @@ class DataSourceFactory:
         In the localized Python backend we primarily use `get_source("Crypto")`.
         """
         key = (name or "").strip().lower()
-        if key in ("crypto", "binance", "okx", "bybit", "bitget", "kucoin", "gate", "mexc", "kraken", "coinbase", "alpaca_crypto"):
+        if key in ("crypto", "binance", "okx", "bybit", "bitget", "gate", "mexc", "kraken", "coinbase", "alpaca_crypto"):
             return cls.get_source("Crypto")
         if key in ("futures",):
             return cls.get_source("Futures")
