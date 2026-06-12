@@ -261,10 +261,29 @@ names and opened 5 equal-weight long positions (~$20k each, signal mode).
 
 - **Rebalance cadence:** daily (`rebalance_frequency=daily`, checked hourly via
   `decide_interval=3600`). Position diffs only — unchanged picks are held.
-- **Signal vs live:** currently `execution_mode=signal` (virtual positions +
-  notifications). To place real orders: connect an Alpaca (paper) or IBKR
-  account, then switch `execution_mode` to `live` — the broker policy layer
-  enforces USStock spot, long-only.
+- **Signal vs live:** as of 2026-06-12 the bot runs `execution_mode=live`
+  against the **Alpaca paper account** (`exchange_config.credential_id=1`,
+  PK* key → paper endpoint auto-detected). Orders flow through
+  `pending_orders` → `PendingOrderWorker._execute_alpaca_order` (market
+  orders, long-only). To move to real money, rebind to a live (AK*) Alpaca
+  credential — the broker policy layer still enforces USStock spot, long-only.
+- **Bot-page visibility + wizard guard:** the strategy carries
+  `trading_config.bot_type='trend'` so it shows on the Trading Bot page
+  (the prebuilt frontend lists a strategy there when `strategy_mode='bot'`
+  OR `trading_config.bot_type` is set). The card's "MA period" style params
+  are cosmetic placeholders from the trend template — the real config lives
+  in `trading_config` (symbol_list / portfolio_size / scorer). A backend
+  guard in `StrategyService.update_strategy` now rejects any update that
+  would rewrite a `cs_strategy_type='cross_sectional'` strategy into a
+  bot-template ScriptStrategy (the Bot wizard did exactly that on 2026-06-12
+  and destroyed the scout; it had to be restored from scratch). Saving from
+  the Bot wizard now fails with a clear error instead of corrupting.
+- **Alpaca sync:** `PendingOrderWorker` PositionSync polls Alpaca every 30s
+  and reconciles exchange positions (size + avg cost) into the strategy
+  ledger (`qd_strategy_positions`), so fills/avg prices in QuantDinger track
+  the broker. Orders submitted while the market is closed sit in `new`
+  status on Alpaca and fill at the 09:30 ET open; the ledger entry prices
+  correct themselves on the next sync after the fill.
 - **Editing the universe / portfolio size:** patch `trading_config.symbol_list`
   / `portfolio_size` via the Agent Gateway (`update_strategy`), then restart
   the strategy so the loop reloads its config.

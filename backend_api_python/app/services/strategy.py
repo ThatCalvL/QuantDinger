@@ -1514,6 +1514,25 @@ class StrategyService:
         if not existing:
             return False
 
+        # Protect cross-sectional portfolio strategies from the Bot-page wizard.
+        # The wizard saves bot edits as ScriptStrategy + strategy_mode='bot' with a
+        # generated template in strategy_code, which silently destroys the
+        # cross-sectional stock-picking config (symbol_list / portfolio_size / scorer).
+        _existing_tc_probe = existing.get('trading_config') or {}
+        if (
+            isinstance(_existing_tc_probe, dict)
+            and str(_existing_tc_probe.get('cs_strategy_type') or '').strip().lower() == 'cross_sectional'
+        ):
+            _wants_script = str(payload.get('strategy_type') or '').strip() == 'ScriptStrategy'
+            _wants_bot_mode = str(payload.get('strategy_mode') or '').strip().lower() == 'bot'
+            _wants_code = bool(str(payload.get('strategy_code') or '').strip())
+            if _wants_script or _wants_bot_mode or _wants_code:
+                raise ValueError(
+                    "This is a cross-sectional portfolio strategy; it cannot be rewritten "
+                    "into a bot-template ScriptStrategy. Edit it from the Strategies page "
+                    "or the Agent Gateway instead of the bot wizard."
+                )
+
         # Merge: allow partial updates
         name = (payload.get('strategy_name') or existing.get('strategy_name') or '').strip()
         market_category = payload.get('market_category') or existing.get('market_category') or 'Crypto'
